@@ -1,74 +1,123 @@
-monsterCoin integration/staging tree
+monsterCoin
 ================================
-
-http://www.monstercoin.org
 
 Copyright (c) 2009-2013 Bitcoin Developers
 Copyright (c) 2011-2013 Litecoin Developers
 
 What is monsterCoin?
 ----------------
+Monsters need to spend money just like everybody else.
 
-monsterCoin is a lite version of Bitcoin using scrypt as a proof-of-work algorithm.
- - 2.5 minute block targets
- - subsidy halves in 840k blocks (~4 years)
- - ~84 million total coins
+Ubuntu 18.04 Installation
+------------
+Below are commands necessary to install MonsterCoin on ubuntu 18.04. Note that some of the commands are interactive. As such you will need to execute line by line.
+```
+sudo -s
 
-The rest is the same as Bitcoin.
- - 50 coins per block
- - 2016 blocks to retarget difficulty
+cd ~/
+git clone https://github.com/SouthwestCCDC/monstercoin.git
+cd ~/monstercoin/src
 
-For more information, as well as an immediately useable, binary version of
-the monsterCoin client sofware, see http://www.monstercoin.org.
+# install dependencies
+apt-get update
+apt-get install libdb4.8++ libdb++-dev libboost-dev miniupnpc libboost-all-dev libminiupnpc-dev build-essential libssl1.0-dev
+
+# create user for service to run as
+adduser monstercoin
+
+# make config dir
+mkdir /home/monstercoin/.monstercoin
+
+# handle bug
+mkdir obj
+
+# In the real world, a smart person would change this password per deployment
+# Since we're lazy, we're just going to use this everywhere
+cat << EOF > /home/monstercoin/.monstercoin/monstercoin.conf
+rpcuser=monstercoinrpc
+rpcpassword=C2xr7dcABXAmhvidci7Q24LNR1VzRVyRpWWLtEqk9k8P
+addnode=199.188.74.124
+addnode=162.194.217.242
+server=1
+listen=1
+EOF
+
+chown -R monstercoin:monstercoin /home/monstercoin/.monstercoin
+
+# build MonsterCoin
+make -f makefile.unix
+
+cp ./monstercoind /opt/
+chmod 755 /opt/monstercoind
+
+# create a monstercoin service
+cat << EOF > /etc/systemd/system/monstercoin.service
+[Unit]
+Description=monstercoin
+After=network.target
+
+[Service]
+Type=simple
+User=monstercoin
+Group=monstercoin
+WorkingDirectory=/opt/
+ExecStart=/opt/monstercoind -debug -printtoconsole
+Restart=on-abort
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+
+# run monstercoin wallet as a service
+systemctl daemon-reload
+systemctl enable monstercoin
+systemctl start monstercoin
+
+#####
+# begin building miner
+#####
+cd ~/
+git clone https://github.com/pooler/cpuminer.git
+cd cpuminer
+apt-get install libcurl3 libjansson-dev autotools-dev automake autoconf m4 libtool pkg-config libcurl-openssl1.0-dev
+./autogen.sh
+./nomacro.pl
+./configure CFLAGS="-O3"
+make
+
+# install cpu miner
+cp ./minerd /opt/
+chmod 755 /opt/minerd
+
+# Create miner service
+cat << EOF > /etc/systemd/system/monstercoin-miner.service
+[Unit]
+Description=monstercoin-miner
+After=network.target
+
+[Service]
+Type=simple
+User=monstercoin
+Group=monstercoin
+WorkingDirectory=/opt/
+ExecStart=/opt/minerd -o http://localhost:9332 -Omonstercoinrpc:C2xr7dcABXAmhvidci7Q24LNR1VzRVyRpWWLtEqk9k8P -t 4
+Restart=on-abort
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# start the miner
+systemctl daemon-reload
+systemctl enable monstercoin-miner
+systemctl start monstercoin-miner
+```
+
 
 License
 -------
 
 monsterCoin is released under the terms of the MIT license. See `COPYING` for more
 information or see http://opensource.org/licenses/MIT.
-
-Development process
--------------------
-
-Developers work in their own trees, then submit pull requests when they think
-their feature or bug fix is ready.
-
-If it is a simple/trivial/non-controversial change, then one of the monsterCoin
-development team members simply pulls it.
-
-If it is a *more complicated or potentially controversial* change, then the patch
-submitter will be asked to start a discussion (if they haven't already) on the
-[mailing list](http://sourceforge.net/mailarchive/forum.php?forum_name=bitcoin-development).
-
-The patch will be accepted if there is broad consensus that it is a good thing.
-Developers should expect to rework and resubmit patches if the code doesn't
-match the project's coding conventions (see `doc/coding.txt`) or are
-controversial.
-
-The `master` branch is regularly built and tested, but is not guaranteed to be
-completely stable. [Tags](https://github.com/bitcoin/bitcoin/tags) are created
-regularly to indicate new official, stable release versions of monsterCoin.
-
-Testing
--------
-
-Testing and code review is the bottleneck for development; we get more pull
-requests than we can review and test. Please be patient and help out, and
-remember this is a security-critical project where any mistake might cost people
-lots of money.
-
-### Automated Testing
-
-Developers are strongly encouraged to write unit tests for new code, and to
-submit new unit tests for old code.
-
-Unit tests for the core code are in `src/test/`. To compile and run them:
-
-    cd src; make -f makefile.unix test
-
-Unit tests for the GUI code are in `src/qt/test/`. To compile and run them:
-
-    qmake BITCOIN_QT_TEST=1 -o Makefile.test bitcoin-qt.pro
-    make -f Makefile.test
-    ./monstercoin-qt_test
 
